@@ -1,0 +1,114 @@
+# Statement of Interest
+
+This report is to analyze covid 19 cases and deaths within the United States. 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(lubridate)
+```
+
+# Data
+
+Data for this report is from John's Hopkins and can be found on [Github]("https://github.com/CSSEGISandData/COVID-19/tree/master/csse_covid_19_data/csse_covid_19_time_series")
+
+```{r import csv}
+us_cases <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv")
+us_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv")
+```
+
+## US Cases
+
+### Filtering data
+
+Excluding not needed data. Deleting columns except for UID, Dates, and renaming County and State.
+
+```{r filter us cases}
+us_cases <- us_cases %>%
+  select(-c(iso2, iso3, code3, FIPS, Country_Region, Lat, Long_, Combined_Key)) %>%
+  rename(County = "Admin2") %>%
+  rename(State = "Province_State")
+```
+
+### Converting data into long format
+
+```{r us cases long}
+us_cases <- us_cases %>% 
+  pivot_longer(cols = -c(UID, County, State),
+               names_to = "Date",
+               values_to = "Cases")
+us_cases$Date <- as.Date(us_cases$Date, "%m/%d/%y")
+```
+
+## US Deaths
+
+### Filtering Data
+
+Excluding not needed data. Deleting columns except for UID, Dates, population, and renaming County and State.
+
+```{r filter us deaths}
+us_deaths <- us_deaths %>%
+  select(-c(iso2, iso3, code3, FIPS, Country_Region, Lat, Long_, Combined_Key)) %>%
+  rename(County = "Admin2") %>%
+  rename(State = "Province_State")
+```
+
+### Converting data into long format
+
+```{r us deaths long}
+us_deaths <- us_deaths %>% 
+  pivot_longer(cols = -c(UID, County, State, Population),
+               names_to = "Date",
+               values_to = "Deaths")
+us_deaths$Date <- as.Date(us_deaths$Date, "%m/%d/%y")
+```
+
+## Joining Cases and Deaths into a single Data Frame
+
+```{r join cases and deaths}
+us <- us_cases %>%
+  full_join(us_deaths)
+
+summary(us)
+```
+
+```{r}
+us <- us %>% filter(Cases > 0)
+
+summary(us)
+View(us)
+```
+
+```{r}
+us_state <- us %>%
+  group_by(State, Date) %>%
+  summarize(Cases = sum(Cases), Deaths = sum(Deaths), Population = sum(Population), .groups = "drop")
+
+View(us_state)
+```
+
+```{r}
+us_state_2 <- us_state %>%
+  group_by(State) %>%
+  mutate(New_Cases = Cases - lag(Cases, default=first(Cases))) %>%
+  mutate(New_Deaths = Deaths - lag(Deaths, default = first(Deaths)))
+
+View(us_state_2)
+```
+
+```{r}
+us_all <- us_state_2 %>%
+  group_by(Date) %>%
+  summarise(New_Cases = sum(New_Cases), New_Deaths = sum(New_Deaths)) %>%
+  filter(New_Cases > 0)
+
+View(us_all)
+```
+
+```{r}
+us_cases_vis <- ggplot(us_all, aes(Date, New_Cases)) +
+  geom_line(mapping = aes(x = Date))
+```
+
